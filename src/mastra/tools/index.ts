@@ -1,5 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import { weatherWorkflow } from '../workflows';
 
 interface GeocodingResponse {
   results: {
@@ -100,3 +101,36 @@ function getWeatherCondition(code: number): string {
   };
   return conditions[code] || 'Unknown';
 }
+
+// Tool that wraps the weather workflow
+export const planActivitiesTool = createTool({
+  id: 'plan-activities',
+  description: 'Get detailed activity recommendations for a city based on the weather forecast. Returns a comprehensive guide with morning activities, afternoon activities, indoor alternatives, and special considerations.',
+  inputSchema: z.object({
+    city: z.string().describe('The city to plan activities for'),
+  }),
+  outputSchema: z.object({
+    activities: z.string().describe('Detailed activity recommendations'),
+  }),
+  execute: async ({ context }) => {
+    // Execute the workflow (direct import to avoid circular dependency)
+    const run = await weatherWorkflow.createRunAsync();
+    const result = await run.start({
+      inputData: {
+        city: context.city,
+      },
+    });
+    
+    if (result.status === 'failed') {
+      throw new Error(`Workflow failed: ${result.error.message}`);
+    }
+    
+    if (result.status === 'suspended') {
+      throw new Error('Workflow was suspended and requires user input');
+    }
+    
+    return {
+      activities: result.result.activities,
+    };
+  },
+});
