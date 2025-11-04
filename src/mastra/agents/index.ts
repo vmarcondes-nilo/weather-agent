@@ -1,5 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
 import { weatherTool, planActivitiesTool } from '../tools';
 import { weatherWorkflow } from '../workflows';
 
@@ -29,4 +30,5 @@ export const weatherAgent = new Agent({
   model: openai('gpt-4o'),
   tools: { weatherTool, planActivitiesTool },
   workflows: { weatherWorkflow },
+  memory: new Memory(), // Enables conversation history with default settings
 });
