@@ -2,7 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import YahooFinance from 'yahoo-finance2';
 
-const yf = new YahooFinance();
+const yf = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 
 // Tool 1: Get Stock Price
 export const getStockPriceTool = createTool({
