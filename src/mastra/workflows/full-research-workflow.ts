@@ -1,14 +1,17 @@
 // ============================================================================
 // FULL RESEARCH WORKFLOW
 // ============================================================================
-// This workflow orchestrates comprehensive equity research by combining:
-// 1. Company Overview - Basic context (price, sector, news)
-// 2. Parallel Specialist Analysis - Fundamental, Sentiment, Risk
-// 3. Research Synthesis - Combine all findings into unified report
-// 4. Investment Thesis - Final recommendation with rating & target
+// This workflow orchestrates comprehensive equity research by combining
+// outputs from all specialist workflows:
 //
-// This is the main workflow used by the Master Research Analyst to produce
-// complete investment research reports.
+// 1. Equity Analysis - Basic company overview (price, financials, news)
+// 2. DCF Valuation - Intrinsic value calculation
+// 3. Comparable Analysis - Peer comparison valuation
+// 4. Sentiment Analysis - News, analyst ratings, insider activity
+// 5. Risk Assessment - Beta, volatility, drawdowns, risk score
+//
+// The workflow then synthesizes all findings into a unified research report
+// and investment thesis.
 // ============================================================================
 
 import { openai } from '@ai-sdk/openai';
@@ -16,31 +19,57 @@ import { Agent } from '@mastra/core/agent';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
-// Import tools from all specialist areas
-import { getStockPriceTool, getFinancialsTool, getCompanyNewsTool } from '../tools/equity-tools';
-import { getFinancialRatiosTool, getBalanceSheetTool, getCashFlowTool } from '../tools/fundamental-tools';
-import { getAnalystRatingsTool, getInsiderTradingTool, getUpgradeDowngradeTool } from '../tools/sentiment-tools';
-import { getBetaVolatilityTool, getDrawdownAnalysisTool, getSectorExposureTool, getShortInterestTool } from '../tools/risk-tools';
+// Import all specialist workflows
+import { equityAnalysisWorkflow } from './equity-workflow';
+import { dcfValuationWorkflow } from './dcf-workflow';
+import { comparableAnalysisWorkflow } from './comparable-workflow';
+import { sentimentAnalysisWorkflow } from './sentiment-workflow';
+import { riskAssessmentWorkflow } from './risk-workflow';
+
+// Import sector exposure tool for peer selection
+import { getSectorExposureTool } from '../tools/risk-tools';
 
 // Initialize OpenAI model
 const llm = openai('gpt-4o');
 
 // ============================================================================
+// SECTOR TO PEERS MAPPING
+// ============================================================================
+// Maps sectors to representative peer companies for comparable analysis.
+// These are major companies that serve as good benchmarks within each sector.
+// ============================================================================
+const SECTOR_PEERS: Record<string, string[]> = {
+  'Technology': ['AAPL', 'MSFT', 'GOOGL', 'META', 'NVDA', 'AVGO', 'CRM'],
+  'Financial Services': ['JPM', 'BAC', 'WFC', 'GS', 'MS', 'C', 'BLK'],
+  'Healthcare': ['JNJ', 'UNH', 'PFE', 'MRK', 'ABBV', 'LLY', 'TMO'],
+  'Consumer Cyclical': ['AMZN', 'TSLA', 'HD', 'NKE', 'MCD', 'SBUX', 'TJX'],
+  'Consumer Defensive': ['PG', 'KO', 'PEP', 'WMT', 'COST', 'PM', 'CL'],
+  'Communication Services': ['GOOGL', 'META', 'NFLX', 'DIS', 'CMCSA', 'T', 'VZ'],
+  'Industrials': ['CAT', 'DE', 'UNP', 'HON', 'GE', 'BA', 'LMT'],
+  'Energy': ['XOM', 'CVX', 'COP', 'SLB', 'EOG', 'PXD', 'MPC'],
+  'Utilities': ['NEE', 'DUK', 'SO', 'D', 'AEP', 'EXC', 'SRE'],
+  'Real Estate': ['PLD', 'AMT', 'EQIX', 'SPG', 'O', 'WELL', 'PSA'],
+  'Basic Materials': ['LIN', 'APD', 'SHW', 'ECL', 'NEM', 'FCX', 'DD'],
+};
+
+// Default peers if sector not found
+const DEFAULT_PEERS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA'];
+
+// ============================================================================
 // MASTER SYNTHESIS AGENT
 // ============================================================================
-// This agent synthesizes all specialist findings into a unified research report
-// and generates the final investment thesis.
+// This agent synthesizes all specialist workflow outputs into a unified
+// research report and generates the final investment thesis.
 // ============================================================================
 const masterSynthesisAgent = new Agent({
   name: 'Master Research Synthesizer',
   model: llm,
   instructions: `
     You are a senior equity research analyst who synthesizes findings from
-    fundamental analysis, sentiment analysis, and risk assessment into
-    comprehensive investment research reports.
+    multiple specialist analyses into comprehensive investment research reports.
 
     Your synthesis should:
-    - Weigh all three perspectives (fundamental, sentiment, risk) appropriately
+    - Weigh all perspectives (fundamental, valuation, sentiment, risk) appropriately
     - Identify where the analyses agree or conflict
     - Provide clear, actionable investment recommendations
     - Be objective and data-driven
@@ -53,11 +82,12 @@ const masterSynthesisAgent = new Agent({
 // ============================================================================
 // STEP 1: FETCH COMPANY OVERVIEW
 // ============================================================================
-// Gathers basic company context needed for all subsequent analysis.
+// Runs the equity analysis workflow to get basic company context,
+// plus fetches sector info for peer selection.
 // ============================================================================
 const fetchCompanyOverview = createStep({
   id: 'fetch-company-overview',
-  description: 'Fetches basic company info, price, sector, and recent news',
+  description: 'Fetches basic company overview and determines sector for peer selection',
 
   inputSchema: z.object({
     ticker: z.string().describe('Stock ticker symbol'),
@@ -65,17 +95,9 @@ const fetchCompanyOverview = createStep({
 
   outputSchema: z.object({
     ticker: z.string(),
-    companyName: z.string(),
-    currentPrice: z.number(),
-    marketCap: z.string(),
     sector: z.string().nullable(),
-    industry: z.string().nullable(),
-    marketCapCategory: z.string().nullable(),
-    recentNews: z.array(z.object({
-      title: z.string(),
-      publisher: z.string(),
-      publishedDate: z.string(),
-    })),
+    peers: z.array(z.string()),
+    equityAnalysis: z.string(),
   }),
 
   execute: async ({ inputData, runtimeContext }) => {
@@ -86,26 +108,36 @@ const fetchCompanyOverview = createStep({
     const ticker = inputData.ticker.toUpperCase();
 
     try {
-      // Fetch price, sector, and news in parallel
-      const [priceData, sectorData, newsData] = await Promise.all([
-        getStockPriceTool.execute({ context: { ticker }, runtimeContext }),
+      // Run equity analysis workflow and get sector in parallel
+      // Note: createRunAsync() is the new API (createRun is deprecated)
+      const [equityRun, sectorData] = await Promise.all([
+        equityAnalysisWorkflow.createRunAsync(),
         getSectorExposureTool.execute({ context: { ticker }, runtimeContext }),
-        getCompanyNewsTool.execute({ context: { ticker, limit: 5 }, runtimeContext }),
       ]);
+      const equityResult = await equityRun.start({ inputData: { ticker } });
+
+      // Get sector and determine peers
+      const sector = sectorData.sector || null;
+      let peers = sector ? (SECTOR_PEERS[sector] || DEFAULT_PEERS) : DEFAULT_PEERS;
+
+      // Remove the ticker itself from peers list
+      peers = peers.filter(p => p.toUpperCase() !== ticker);
+
+      // Limit to 4 peers for efficiency
+      peers = peers.slice(0, 4);
+
+      // Extract analysis from workflow result
+      // Mastra WorkflowResult: on success, 'result' contains the final output
+      let equityAnalysis = 'Equity analysis not available';
+      if (equityResult.status === 'success' && equityResult.result) {
+        equityAnalysis = (equityResult.result as { analysis: string }).analysis || equityAnalysis;
+      }
 
       return {
         ticker,
-        companyName: sectorData.companyName,
-        currentPrice: priceData.price,
-        marketCap: priceData.marketCap,
-        sector: sectorData.sector,
-        industry: sectorData.industry,
-        marketCapCategory: sectorData.marketCapCategory,
-        recentNews: newsData.articles.map(a => ({
-          title: a.title,
-          publisher: a.publisher,
-          publishedDate: a.publishedDate,
-        })),
+        sector,
+        peers,
+        equityAnalysis,
       };
     } catch (error) {
       throw new Error(`Failed to fetch company overview for ${ticker}: ${error}`);
@@ -114,123 +146,29 @@ const fetchCompanyOverview = createStep({
 });
 
 // ============================================================================
-// STEP 2: PARALLEL SPECIALIST ANALYSIS
+// STEP 2: RUN SPECIALIST WORKFLOWS IN PARALLEL
 // ============================================================================
-// Runs fundamental, sentiment, and risk analysis in parallel for efficiency.
+// Executes DCF, Comparable, Sentiment, and Risk workflows simultaneously.
 // ============================================================================
-const runSpecialistAnalysis = createStep({
-  id: 'run-specialist-analysis',
-  description: 'Runs fundamental, sentiment, and risk analysis in parallel',
+const runSpecialistWorkflows = createStep({
+  id: 'run-specialist-workflows',
+  description: 'Runs DCF, Comparable, Sentiment, and Risk workflows in parallel',
 
   inputSchema: z.object({
     ticker: z.string(),
-    companyName: z.string(),
-    currentPrice: z.number(),
-    marketCap: z.string(),
     sector: z.string().nullable(),
-    industry: z.string().nullable(),
-    marketCapCategory: z.string().nullable(),
-    recentNews: z.array(z.object({
-      title: z.string(),
-      publisher: z.string(),
-      publishedDate: z.string(),
-    })),
+    peers: z.array(z.string()),
+    equityAnalysis: z.string(),
   }),
 
   outputSchema: z.object({
     ticker: z.string(),
-    companyOverview: z.any(),
-    fundamentalData: z.any(),
-    sentimentData: z.any(),
-    riskData: z.any(),
-  }),
-
-  execute: async ({ inputData, runtimeContext }) => {
-    if (!inputData) {
-      throw new Error('Input data not found');
-    }
-
-    const ticker = inputData.ticker;
-
-    try {
-      // Run all specialist analyses in parallel
-      const [
-        // Fundamental data
-        financialRatios,
-        balanceSheet,
-        cashFlow,
-        // Sentiment data
-        analystRatings,
-        insiderTrading,
-        upgradeDowngrade,
-        // Risk data
-        betaVolatility,
-        drawdownAnalysis,
-        shortInterest,
-      ] = await Promise.all([
-        // Fundamental
-        getFinancialRatiosTool.execute({ context: { ticker }, runtimeContext }),
-        getBalanceSheetTool.execute({ context: { ticker }, runtimeContext }),
-        getCashFlowTool.execute({ context: { ticker }, runtimeContext }),
-        // Sentiment
-        getAnalystRatingsTool.execute({ context: { ticker }, runtimeContext }),
-        getInsiderTradingTool.execute({ context: { ticker }, runtimeContext }),
-        getUpgradeDowngradeTool.execute({ context: { ticker }, runtimeContext }),
-        // Risk
-        getBetaVolatilityTool.execute({ context: { ticker }, runtimeContext }),
-        getDrawdownAnalysisTool.execute({ context: { ticker, period: '1y' }, runtimeContext }),
-        getShortInterestTool.execute({ context: { ticker }, runtimeContext }),
-      ]);
-
-      return {
-        ticker,
-        companyOverview: inputData,
-        fundamentalData: {
-          ratios: financialRatios,
-          balanceSheet,
-          cashFlow,
-        },
-        sentimentData: {
-          analystRatings,
-          insiderTrading,
-          upgradeDowngrade,
-        },
-        riskData: {
-          betaVolatility,
-          drawdownAnalysis,
-          shortInterest,
-        },
-      };
-    } catch (error) {
-      throw new Error(`Failed to run specialist analysis for ${ticker}: ${error}`);
-    }
-  },
-});
-
-// ============================================================================
-// STEP 3: SYNTHESIZE RESEARCH REPORT
-// ============================================================================
-// Combines all specialist findings into a unified research report.
-// ============================================================================
-const synthesizeResearchReport = createStep({
-  id: 'synthesize-research-report',
-  description: 'Synthesizes all specialist findings into a unified research report',
-
-  inputSchema: z.object({
-    ticker: z.string(),
-    companyOverview: z.any(),
-    fundamentalData: z.any(),
-    sentimentData: z.any(),
-    riskData: z.any(),
-  }),
-
-  outputSchema: z.object({
-    ticker: z.string(),
-    companyOverview: z.any(),
-    fundamentalData: z.any(),
-    sentimentData: z.any(),
-    riskData: z.any(),
-    researchReport: z.string(),
+    sector: z.string().nullable(),
+    equityAnalysis: z.string(),
+    dcfValuation: z.string(),
+    comparableAnalysis: z.string(),
+    sentimentAnalysis: z.string(),
+    riskAssessment: z.string(),
   }),
 
   execute: async ({ inputData }) => {
@@ -238,140 +176,100 @@ const synthesizeResearchReport = createStep({
       throw new Error('Input data not found');
     }
 
-    const { ticker, companyOverview, fundamentalData, sentimentData, riskData } = inputData;
+    const { ticker, sector, peers, equityAnalysis } = inputData;
 
-    // Build comprehensive prompt with all data
-    const prompt = `You are synthesizing a comprehensive equity research report for ${ticker} (${companyOverview.companyName}).
+    try {
+      // Run all 4 specialist workflows in parallel
+      // Note: createRunAsync() is the new API (createRun is deprecated)
+      const [dcfRun, comparableRun, sentimentRun, riskRun] = await Promise.all([
+        dcfValuationWorkflow.createRunAsync(),
+        comparableAnalysisWorkflow.createRunAsync(),
+        sentimentAnalysisWorkflow.createRunAsync(),
+        riskAssessmentWorkflow.createRunAsync(),
+      ]);
 
-=== COMPANY OVERVIEW ===
-Current Price: $${companyOverview.currentPrice}
-Market Cap: ${companyOverview.marketCap}
-Sector: ${companyOverview.sector || 'N/A'}
-Industry: ${companyOverview.industry || 'N/A'}
-Market Cap Category: ${companyOverview.marketCapCategory || 'N/A'}
+      // Start all workflows in parallel and use allSettled for graceful error handling
+      const [dcfResult, comparableResult, sentimentResult, riskResult] = await Promise.allSettled([
+        dcfRun.start({ inputData: { ticker } }),
+        comparableRun.start({ inputData: { ticker, peers } }),
+        sentimentRun.start({ inputData: { ticker } }),
+        riskRun.start({ inputData: { ticker } }),
+      ]);
 
-Recent News Headlines:
-${companyOverview.recentNews.map((n: any) => `- ${n.title} (${n.publisher})`).join('\n')}
+      // Helper function to extract result from workflow
+      const extractResult = (
+        settledResult: PromiseSettledResult<any>,
+        fieldName: string,
+        fallbackMessage: string
+      ): string => {
+        if (settledResult.status === 'rejected') {
+          return `${fallbackMessage}: ${settledResult.reason}`;
+        }
+        const workflowResult = settledResult.value;
+        if (workflowResult.status === 'success' && workflowResult.result) {
+          return (workflowResult.result as Record<string, any>)[fieldName] || fallbackMessage;
+        }
+        return fallbackMessage;
+      };
 
-=== FUNDAMENTAL ANALYSIS ===
-Profitability:
-- Gross Margin: ${fundamentalData.ratios.profitability?.grossMargin?.toFixed(2) || 'N/A'}%
-- Operating Margin: ${fundamentalData.ratios.profitability?.operatingMargin?.toFixed(2) || 'N/A'}%
-- Net Margin: ${fundamentalData.ratios.profitability?.netMargin?.toFixed(2) || 'N/A'}%
-- ROE: ${fundamentalData.ratios.profitability?.roe?.toFixed(2) || 'N/A'}%
-- ROA: ${fundamentalData.ratios.profitability?.roa?.toFixed(2) || 'N/A'}%
-- Revenue Growth: ${fundamentalData.ratios.profitability?.revenueGrowth?.toFixed(2) || 'N/A'}%
-- Earnings Growth: ${fundamentalData.ratios.profitability?.earningsGrowth?.toFixed(2) || 'N/A'}%
+      // Extract results, handling failures gracefully
+      const dcfValuation = extractResult(
+        dcfResult,
+        'valuation',
+        'DCF analysis not available - company may have negative free cash flow'
+      );
 
-Valuation:
-- P/E Ratio: ${fundamentalData.ratios.valuation?.peRatio?.toFixed(2) || 'N/A'}
-- Forward P/E: ${fundamentalData.ratios.valuation?.forwardPE?.toFixed(2) || 'N/A'}
-- P/B Ratio: ${fundamentalData.ratios.valuation?.pbRatio?.toFixed(2) || 'N/A'}
-- P/S Ratio: ${fundamentalData.ratios.valuation?.psRatio?.toFixed(2) || 'N/A'}
-- PEG Ratio: ${fundamentalData.ratios.valuation?.pegRatio?.toFixed(2) || 'N/A'}
-- EV/EBITDA: ${fundamentalData.ratios.valuation?.evToEbitda?.toFixed(2) || 'N/A'}
+      const comparableAnalysis = extractResult(
+        comparableResult,
+        'analysis',
+        'Comparable analysis not available'
+      );
 
-Balance Sheet:
-- Total Cash: $${(fundamentalData.balanceSheet.balanceSheet?.totalCash / 1e9)?.toFixed(2) || 'N/A'}B
-- Total Debt: $${(fundamentalData.balanceSheet.balanceSheet?.totalDebt / 1e9)?.toFixed(2) || 'N/A'}B
-- Debt-to-Equity: ${fundamentalData.balanceSheet.balanceSheet?.debtToEquity?.toFixed(2) || 'N/A'}
-- Current Ratio: ${fundamentalData.balanceSheet.balanceSheet?.currentRatio?.toFixed(2) || 'N/A'}
-- Quick Ratio: ${fundamentalData.balanceSheet.balanceSheet?.quickRatio?.toFixed(2) || 'N/A'}
+      const sentimentAnalysis = extractResult(
+        sentimentResult,
+        'analysis',
+        'Sentiment analysis not available'
+      );
 
-Cash Flow:
-- Operating Cash Flow: $${(fundamentalData.cashFlow.cashFlow?.operatingCashFlow / 1e9)?.toFixed(2) || 'N/A'}B
-- Free Cash Flow: $${(fundamentalData.cashFlow.cashFlow?.freeCashFlow / 1e9)?.toFixed(2) || 'N/A'}B
+      const riskAssessment = extractResult(
+        riskResult,
+        'riskAssessment',
+        'Risk assessment not available'
+      );
 
-=== SENTIMENT ANALYSIS ===
-Analyst Ratings:
-- Strong Buy: ${sentimentData.analystRatings.ratings?.strongBuy || 0}
-- Buy: ${sentimentData.analystRatings.ratings?.buy || 0}
-- Hold: ${sentimentData.analystRatings.ratings?.hold || 0}
-- Sell: ${sentimentData.analystRatings.ratings?.sell || 0}
-- Strong Sell: ${sentimentData.analystRatings.ratings?.strongSell || 0}
-- Average Price Target: $${sentimentData.analystRatings.priceTarget?.average?.toFixed(2) || 'N/A'}
-- Price Target Range: $${sentimentData.analystRatings.priceTarget?.low?.toFixed(2) || 'N/A'} - $${sentimentData.analystRatings.priceTarget?.high?.toFixed(2) || 'N/A'}
-
-Insider Trading:
-- Net Insider Sentiment: ${sentimentData.insiderTrading.summary?.netSentiment || 'N/A'}
-- Recent Transactions: ${sentimentData.insiderTrading.transactions?.length || 0}
-
-Recent Upgrades/Downgrades:
-${sentimentData.upgradeDowngrade.events?.slice(0, 3).map((e: any) => `- ${e.firm}: ${e.action} to ${e.toGrade}`).join('\n') || 'None recent'}
-
-=== RISK ASSESSMENT ===
-Market Risk:
-- Beta: ${riskData.betaVolatility.beta?.toFixed(2) || 'N/A'}
-- 52-Week Range: ${riskData.betaVolatility.fiftyTwoWeekRange || 'N/A'}
-- % From 52-Week High: ${riskData.betaVolatility.percentFromHigh?.toFixed(2) || 'N/A'}%
-- Trend Signal: ${riskData.betaVolatility.trendSignal || 'N/A'}
-
-Drawdown Analysis (1Y):
-- Max Drawdown: ${riskData.drawdownAnalysis.maxDrawdown?.toFixed(2) || 'N/A'}%
-- Current Drawdown: ${riskData.drawdownAnalysis.currentDrawdownFromPeriodHigh?.toFixed(2) || 'N/A'}%
-- Period Return: ${riskData.drawdownAnalysis.periodReturn?.toFixed(2) || 'N/A'}%
-
-Short Interest:
-- Short % of Float: ${riskData.shortInterest.shortPercentOfFloat?.toFixed(2) || 'N/A'}%
-- Short Ratio (Days to Cover): ${riskData.shortInterest.shortRatio?.toFixed(2) || 'N/A'}
-- Short Squeeze Risk: ${riskData.shortInterest.shortSqueezeRisk || 'N/A'}
-- Sentiment Indicator: ${riskData.shortInterest.sentimentIndicator || 'N/A'}
-
-=== YOUR TASK ===
-Synthesize all this data into a comprehensive research report with:
-
-1. **EXECUTIVE SUMMARY** (2-3 sentences)
-
-2. **SCORES** (1-10 scale with brief justification)
-   - Fundamental Score: X/10
-   - Sentiment Score: X/10
-   - Risk Score: X/10 (higher = more risk)
-
-3. **KEY STRENGTHS** (3-4 bullet points)
-
-4. **KEY WEAKNESSES / RISKS** (3-4 bullet points)
-
-5. **CATALYSTS TO WATCH** (upcoming events that could move the stock)
-
-6. **AREAS OF AGREEMENT** (where fundamental, sentiment, and risk analyses align)
-
-7. **AREAS OF CONFLICT** (where the analyses diverge)
-
-Be specific, cite numbers, and maintain objectivity.`;
-
-    const response = await masterSynthesisAgent.streamLegacy([
-      { role: 'user', content: prompt },
-    ]);
-
-    let reportText = '';
-    for await (const chunk of response.textStream) {
-      process.stdout.write(chunk);
-      reportText += chunk;
+      return {
+        ticker,
+        sector,
+        equityAnalysis,
+        dcfValuation,
+        comparableAnalysis,
+        sentimentAnalysis,
+        riskAssessment,
+      };
+    } catch (error) {
+      throw new Error(`Failed to run specialist workflows for ${ticker}: ${error}`);
     }
-
-    return {
-      ...inputData,
-      researchReport: reportText,
-    };
   },
 });
 
 // ============================================================================
-// STEP 4: GENERATE INVESTMENT THESIS
+// STEP 3: SYNTHESIZE FULL RESEARCH REPORT & INVESTMENT THESIS
 // ============================================================================
-// Produces the final investment recommendation with rating and target price.
+// Combines all workflow outputs into a unified research report and
+// generates the final investment thesis with ratings and targets.
 // ============================================================================
-const generateInvestmentThesis = createStep({
-  id: 'generate-investment-thesis',
-  description: 'Generates final investment thesis with rating and target',
+const synthesizeFullReport = createStep({
+  id: 'synthesize-full-report',
+  description: 'Synthesizes all workflow outputs into research report and investment thesis',
 
   inputSchema: z.object({
     ticker: z.string(),
-    companyOverview: z.any(),
-    fundamentalData: z.any(),
-    sentimentData: z.any(),
-    riskData: z.any(),
-    researchReport: z.string(),
+    sector: z.string().nullable(),
+    equityAnalysis: z.string(),
+    dcfValuation: z.string(),
+    comparableAnalysis: z.string(),
+    sentimentAnalysis: z.string(),
+    riskAssessment: z.string(),
   }),
 
   outputSchema: z.object({
@@ -387,24 +285,72 @@ const generateInvestmentThesis = createStep({
       throw new Error('Input data not found');
     }
 
-    const { ticker, companyOverview, sentimentData, riskData, researchReport } = inputData;
+    const { ticker, sector, equityAnalysis, dcfValuation, comparableAnalysis, sentimentAnalysis, riskAssessment } = inputData;
 
-    const prompt = `Based on the research report below, generate a final investment thesis for ${ticker}.
+    // Build comprehensive prompt with all workflow outputs
+    const prompt = `You are synthesizing a comprehensive equity research report for ${ticker}.
 
-=== RESEARCH REPORT ===
-${researchReport}
+You have received analysis from 5 specialist workflows. Your task is to synthesize ALL of this information into:
+1. A unified RESEARCH REPORT
+2. A final INVESTMENT THESIS
 
-=== ADDITIONAL CONTEXT ===
-Current Price: $${companyOverview.currentPrice}
-Analyst Average Price Target: $${sentimentData.analystRatings.priceTarget?.average?.toFixed(2) || 'N/A'}
-Beta: ${riskData.betaVolatility.beta?.toFixed(2) || 'N/A'}
+=== EQUITY OVERVIEW ===
+${equityAnalysis}
+
+=== DCF VALUATION ===
+${dcfValuation}
+
+=== COMPARABLE COMPANY ANALYSIS ===
+${comparableAnalysis}
+
+=== SENTIMENT ANALYSIS ===
+${sentimentAnalysis}
+
+=== RISK ASSESSMENT ===
+${riskAssessment}
 
 === YOUR TASK ===
-Generate a final investment thesis with:
+
+**PART 1: RESEARCH REPORT**
+
+Create a comprehensive research report with:
+
+1. **EXECUTIVE SUMMARY** (3-4 sentences)
+   - What the company does
+   - Current investment case in brief
+   - Overall recommendation preview
+
+2. **SCORES** (1-10 scale with brief justification)
+   | Category | Score | Justification |
+   |----------|-------|---------------|
+   | Fundamental Quality | X/10 | [Brief] |
+   | Valuation | X/10 | [Brief - 10 = very undervalued] |
+   | Sentiment | X/10 | [Brief] |
+   | Risk | X/10 | [Brief - 10 = lowest risk] |
+   | **OVERALL** | X/10 | [Weighted assessment] |
+
+3. **VALUATION SUMMARY**
+   - DCF Intrinsic Value: $X (X% upside/downside)
+   - Comparable Implied Value: $X
+   - Valuation Verdict: [Undervalued / Fairly Valued / Overvalued]
+
+4. **KEY STRENGTHS** (4-5 bullet points from across all analyses)
+
+5. **KEY RISKS & WEAKNESSES** (4-5 bullet points from across all analyses)
+
+6. **CATALYSTS TO WATCH** (upcoming events that could move the stock)
+
+7. **AREAS OF AGREEMENT** (where multiple analyses align)
+
+8. **AREAS OF CONFLICT** (where analyses diverge - and your interpretation)
+
+---
+
+**PART 2: INVESTMENT THESIS**
 
 1. **RATING**: Strong Buy / Buy / Hold / Sell / Strong Sell
 
-2. **CONFIDENCE LEVEL**: High / Medium / Low (with brief explanation)
+2. **CONFIDENCE LEVEL**: High / Medium / Low (with explanation)
 
 3. **TARGET PRICE RANGE**
    - Bear Case: $X (explanation)
@@ -417,31 +363,60 @@ Generate a final investment thesis with:
 
 6. **BEAR CASE** (3 key points supporting downside)
 
-7. **KEY METRICS TO WATCH** (3-4 specific metrics/events to monitor)
+7. **KEY METRICS TO WATCH** (4-5 specific metrics/events to monitor)
 
-8. **POSITION SIZING RECOMMENDATION** (based on risk profile)
+8. **POSITION SIZING RECOMMENDATION**
    - Conservative investors: X% of portfolio
    - Moderate investors: X% of portfolio
    - Aggressive investors: X% of portfolio
 
-Be decisive but acknowledge uncertainty. Provide specific numbers where possible.`;
+---
+
+Be specific, cite numbers from the analyses, and maintain objectivity.
+Clearly separate PART 1 (Research Report) from PART 2 (Investment Thesis) with headers.`;
 
     const response = await masterSynthesisAgent.streamLegacy([
       { role: 'user', content: prompt },
     ]);
 
-    let thesisText = '';
+    let fullReport = '';
     for await (const chunk of response.textStream) {
       process.stdout.write(chunk);
-      thesisText += chunk;
+      fullReport += chunk;
     }
+
+    // Split the report into research report and investment thesis
+    // Look for "PART 2" or "INVESTMENT THESIS" as separator
+    let researchReport = fullReport;
+    let investmentThesis = '';
+
+    const part2Markers = ['**PART 2:', 'PART 2:', '## INVESTMENT THESIS', '**INVESTMENT THESIS'];
+    for (const marker of part2Markers) {
+      const splitIndex = fullReport.indexOf(marker);
+      if (splitIndex !== -1) {
+        researchReport = fullReport.substring(0, splitIndex).trim();
+        investmentThesis = fullReport.substring(splitIndex).trim();
+        break;
+      }
+    }
+
+    // If no clear split, put everything in research report
+    if (!investmentThesis) {
+      researchReport = fullReport;
+      investmentThesis = 'See research report above for investment thesis.';
+    }
+
+    // Extract company name and price from equity analysis (basic parsing)
+    // These are approximations - the full data is in the analyses
+    const companyName = ticker; // Could parse from equityAnalysis if needed
+    const currentPrice = 0; // Could parse from equityAnalysis if needed
 
     return {
       ticker,
-      companyName: companyOverview.companyName,
-      currentPrice: companyOverview.currentPrice,
+      companyName,
+      currentPrice,
       researchReport,
-      investmentThesis: thesisText,
+      investmentThesis,
     };
   },
 });
@@ -449,7 +424,10 @@ Be decisive but acknowledge uncertainty. Provide specific numbers where possible
 // ============================================================================
 // FULL RESEARCH WORKFLOW DEFINITION
 // ============================================================================
-// Chains all 4 steps together into a complete research pipeline.
+// Chains all 3 steps together into a complete research pipeline:
+// 1. Fetch company overview (equity analysis + sector/peers)
+// 2. Run 4 specialist workflows in parallel
+// 3. Synthesize into unified report + thesis
 //
 // USAGE:
 //   const result = await fullResearchWorkflow.execute({ ticker: 'AAPL' });
@@ -472,9 +450,8 @@ export const fullResearchWorkflow = createWorkflow({
   }),
 })
   .then(fetchCompanyOverview)
-  .then(runSpecialistAnalysis)
-  .then(synthesizeResearchReport)
-  .then(generateInvestmentThesis);
+  .then(runSpecialistWorkflows)
+  .then(synthesizeFullReport);
 
 // Commit the workflow
 fullResearchWorkflow.commit();

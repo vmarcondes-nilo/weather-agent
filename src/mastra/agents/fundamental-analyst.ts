@@ -8,7 +8,8 @@ import {
   getCashFlowTool, 
   getFinancialRatiosTool 
 } from '../tools/fundamental-tools';
-import { dcfValuationWorkflow, comparableAnalysisWorkflow } from '../workflows/valuation-workflows';
+import { dcfValuationWorkflow } from '../workflows/dcf-workflow';
+import { comparableAnalysisWorkflow } from '../workflows/comparable-workflow';
 
 export const fundamentalAnalyst = new Agent({
   name: 'Fundamental Analyst',
