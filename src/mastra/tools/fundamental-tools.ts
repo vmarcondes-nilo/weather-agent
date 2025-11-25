@@ -427,18 +427,48 @@ export const getFinancialRatiosTool = createTool({
       // - financialData: Margins, ROE, ROA, liquidity, leverage, efficiency
       // - defaultKeyStatistics: Forward P/E, P/B, PEG, EV/EBITDA
       // - summaryDetail: Trailing P/E, P/S
-      const summary = await yf.quoteSummary(ticker, { 
-        modules: ['financialData', 'defaultKeyStatistics', 'summaryDetail'] 
+      const summary = await yf.quoteSummary(ticker, {
+        modules: ['financialData', 'defaultKeyStatistics', 'summaryDetail']
       });
-      
+
       const financialData = summary.financialData || ({} as any);
       const keyStats = summary.defaultKeyStatistics || ({} as any);
       const summaryDetail = summary.summaryDetail || ({} as any);
-      
+
+      // Fetch EBIT and Interest Expense from fundamentalsTimeSeries
+      // (incomeStatementHistory has been returning incomplete data since Nov 2024)
+      const now = new Date();
+      const twoYearsAgo = new Date(now.getFullYear() - 2, now.getMonth(), now.getDate());
+      let interestCoverage: number | null = null;
+      try {
+        const timeSeries = await yf.fundamentalsTimeSeries(ticker, {
+          period1: twoYearsAgo.toISOString().split('T')[0],
+          period2: now.toISOString().split('T')[0],
+          type: 'annual',
+          module: 'all'
+        });
+        const latest = timeSeries[timeSeries.length - 1] as any;
+        const ebit = latest?.EBIT;
+        const interestExpense = latest?.interestExpense;
+        if (ebit && interestExpense && interestExpense !== 0) {
+          interestCoverage = Math.abs(ebit / interestExpense);
+        }
+      } catch {
+        // fundamentalsTimeSeries may not be available for all tickers
+      }
+
       // Calculate cash ratio (custom metric not provided by API)
       // Cash Ratio = Cash / Total Debt (how much cash vs debt)
-      const cashRatio = financialData.totalCash && financialData.totalDebt 
-        ? financialData.totalCash / financialData.totalDebt 
+      const cashRatio = financialData.totalCash && financialData.totalDebt
+        ? financialData.totalCash / financialData.totalDebt
+        : null;
+
+      // Calculate PEG ratio (Yahoo Finance no longer provides this directly)
+      // PEG = P/E Ratio / Earnings Growth Rate (as percentage)
+      const trailingPE = summaryDetail.trailingPE;
+      const earningsGrowth = financialData.earningsGrowth;
+      const pegRatio = trailingPE && earningsGrowth && earningsGrowth > 0
+        ? trailingPE / (earningsGrowth * 100)
         : null;
       
       // Build and return all 5 categories of ratios
@@ -466,8 +496,8 @@ export const getFinancialRatiosTool = createTool({
         
         // CATEGORY 3: Leverage (debt levels)
         leverage: {
-          debtToEquity: financialData.debtToEquity || null,
-          interestCoverage: (financialData as any).interestCoverage || null,  // Not always available
+          debtToEquity: financialData.debtToEquity ?? null,
+          interestCoverage,  // Calculated from EBIT / Interest Expense
         },
         
         // CATEGORY 4: Efficiency (per-share metrics)
@@ -478,13 +508,13 @@ export const getFinancialRatiosTool = createTool({
         
         // CATEGORY 5: Valuation (is the stock price reasonable?)
         valuation: {
-          peRatio: summaryDetail.trailingPE || null,                        // From summaryDetail
-          forwardPE: keyStats.forwardPE || null,                            // From keyStats
-          pbRatio: keyStats.priceToBook || null,                            // From keyStats
-          psRatio: summaryDetail.priceToSalesTrailing12Months || null,     // From summaryDetail
-          pegRatio: keyStats.pegRatio || null,                              // From keyStats
-          evToEbitda: keyStats.enterpriseToEbitda || null,                  // From keyStats
-          evToRevenue: keyStats.enterpriseToRevenue || null,                // From keyStats
+          peRatio: summaryDetail.trailingPE ?? null,                        // From summaryDetail
+          forwardPE: keyStats.forwardPE ?? null,                            // From keyStats
+          pbRatio: keyStats.priceToBook ?? null,                            // From keyStats
+          psRatio: summaryDetail.priceToSalesTrailing12Months ?? null,     // From summaryDetail
+          pegRatio,                                                         // Calculated: P/E / Earnings Growth %
+          evToEbitda: keyStats.enterpriseToEbitda ?? null,                  // From keyStats
+          evToRevenue: keyStats.enterpriseToRevenue ?? null,                // From keyStats
         },
       };
     } catch (error) {

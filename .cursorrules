@@ -1,6 +1,6 @@
 Public Equities Research Analyst - Architecture Plan
 Core Concept
-A multi-agent system that conducts comprehensive equity research, combining fundamental analysis, technical analysis, sentiment analysis, and risk assessment.
+A multi-agent system that conducts comprehensive equity research, combining fundamental analysis, sentiment analysis, and risk assessment.
 ________________________________________
 1. AGENTS (Multiple Specialized Agents)
 A. Master Research Analyst Agent
@@ -13,17 +13,12 @@ B. Fundamental Analyst Agent
 •	Tools: Financial data tools, SEC filing tools, earnings tools
 •	Workflows: DCF valuation, comparable company analysis
 •	Specialization: Balance sheets, income statements, cash flow analysis
-C. Technical Analyst Agent
-•	Role: Chart patterns, indicators, price action analysis
-•	Tools: Price data, volume data, technical indicator calculators
-•	Workflows: Trend analysis, support/resistance identification
-•	Specialization: Moving averages, RSI, MACD, Fibonacci levels
-D. Sentiment & News Analyst Agent
+C. Sentiment & News Analyst Agent
 •	Role: News sentiment, social media sentiment, analyst ratings
 •	Tools: News APIs, Twitter/Reddit sentiment, analyst ratings aggregators
 •	Workflows: Sentiment scoring, event impact analysis
 •	Specialization: NLP for financial news, sentiment scoring
-E. Risk Assessment Agent
+D. Risk Assessment Agent
 •	Role: Portfolio risk, sector exposure, correlation analysis
 •	Tools: Risk metrics calculators, portfolio analytics
 •	Workflows: VaR calculation, stress testing
@@ -43,12 +38,6 @@ Fundamental Data Tools
 - getFinancialRatios - P/E, P/B, ROE, etc.
 - getEarningsData - EPS, earnings surprises, guidance
 - getSECFilings - 10-K, 10-Q, 8-K filings
-Technical Analysis Tools
-- calculateMovingAverage - SMA, EMA
-- calculateRSI - Relative Strength Index
-- calculateMACD - MACD indicator
-- calculateBollingerBands - Volatility bands
-- identifyChartPatterns - Head & shoulders, triangles, etc.
 News & Sentiment Tools
 - getCompanyNews - Recent news articles
 - getAnalystRatings - Buy/sell/hold ratings
@@ -66,11 +55,10 @@ A. Full Research Report Workflow
 Steps:
 1. fetchCompanyOverview - Basic company info
 2. fundamentalAnalysis - Run fundamental analyst
-3. technicalAnalysis - Run technical analyst  
-4. sentimentAnalysis - Run sentiment analyst
-5. riskAssessment - Run risk analyst
-6. synthesizeReport - Master analyst combines all findings
-7. generateInvestmentThesis - Final recommendation
+3. sentimentAnalysis - Run sentiment analyst
+4. riskAssessment - Run risk analyst
+5. synthesizeReport - Master analyst combines all findings
+6. generateInvestmentThesis - Final recommendation
 Output: Comprehensive PDF/markdown research report
 B. Quick Analysis Workflow
 Steps:
@@ -125,7 +113,7 @@ Conversation History
 ________________________________________
 5. DATA SOURCES & APIs
 Free/Freemium APIs
-•	Alpha Vantage - Stock prices, technical indicators
+•	Alpha Vantage - Stock prices, historical data
 •	Yahoo Finance (via yfinance) - Historical data, financials
 •	SEC EDGAR - Official filings
 •	Financial Modeling Prep - Comprehensive financial data
@@ -140,8 +128,7 @@ ________________________________________
 Financial Concepts DB
 - Accounting principles (GAAP, IFRS)
 - Valuation methodologies
-- Technical analysis patterns
-- Economic
+- Economic indicators
 Regulatory Knowledge
 - SEC regulations
 - Insider trading rules
@@ -160,13 +147,11 @@ equities-analyst/
 │   │   ├── agents/
 │   │   │   ├── master-analyst.ts
 │   │   │   ├── fundamental-analyst.ts
-│   │   │   ├── technical-analyst.ts
 │   │   │   ├── sentiment-analyst.ts
 │   │   │   └── risk-analyst.ts
 │   │   ├── tools/
 │   │   │   ├── market-data.ts
 │   │   │   ├── fundamental-data.ts
-│   │   │   ├── technical-indicators.ts
 │   │   │   ├── news-sentiment.ts
 │   │   │   └── screening.ts
 │   │   ├── workflows/
@@ -223,7 +208,6 @@ Portfolio Optimization
 Alert System
 •	Price alerts
 •	News alerts
-•	Technical signal alerts
 •	Earnings date reminders
 Collaboration
 •	Share research with team
@@ -237,7 +221,7 @@ Phase 1: MVP (Week 1-2)
 •	Quick analysis workflow
 •	Simple conversation memory
 Phase 2: Specialized Agents (Week 3-4)
-•	Add fundamental, technical, sentiment agents
+•	Add sentiment and risk assessment agents
 •	Full research workflow
 •	Enhanced memory with preferences
 •	Basic report generation

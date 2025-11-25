@@ -76,24 +76,30 @@ export const getFinancialsTool = createTool({
   }),
   execute: async ({ context }) => {
     const ticker = context.ticker.toUpperCase();
-    
+
     try {
-      const quote = await yf.quote(ticker);
-      
+      const [quote, summary] = await Promise.all([
+        yf.quote(ticker),
+        yf.quoteSummary(ticker, { modules: ['financialData', 'summaryDetail'] }),
+      ]);
+
       if (!quote) {
         throw new Error(`Financial data not found for ${ticker}`);
       }
-      
+
+      const financialData = summary?.financialData;
+      const summaryDetail = summary?.summaryDetail;
+
       return {
         ticker,
         companyName: quote.longName || quote.shortName || ticker,
         peRatio: quote.trailingPE || null,
         eps: quote.epsTrailingTwelveMonths || null,
         dividendYield: quote.dividendYield ? quote.dividendYield * 100 : null,
-        profitMargin: quote.profitMargins ? quote.profitMargins * 100 : null,
-        debtToEquity: (quote as any).debtToEquity || null,
-        revenueGrowth: quote.revenueGrowth ? quote.revenueGrowth * 100 : null,
-        beta: quote.beta || null,
+        profitMargin: financialData?.profitMargins ? financialData.profitMargins * 100 : null,
+        debtToEquity: financialData?.debtToEquity ?? null,
+        revenueGrowth: financialData?.revenueGrowth ? financialData.revenueGrowth * 100 : null,
+        beta: summaryDetail?.beta ?? null,
       };
     } catch (error) {
       throw new Error(`Failed to fetch financials for ${ticker}: ${error}`);
