@@ -14,6 +14,7 @@ import {
   Snapshot,
   StockScore,
   HoldingSnapshot,
+  ConvictionLevel,
 } from './schema';
 
 // Row type for database results
@@ -142,14 +143,33 @@ export async function addHolding(holding: Omit<Holding, 'id' | 'acquiredAt' | 'u
 
   const result = await client.execute({
     sql: `INSERT INTO holdings (
-      portfolio_id, ticker, shares, avg_cost, current_price, sector, acquired_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      portfolio_id, ticker, shares, avg_cost, current_price, sector,
+      conviction_score, conviction_level, last_analysis_id, last_analysis_date,
+      acquired_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(portfolio_id, ticker) DO UPDATE SET
       shares = shares + excluded.shares,
       avg_cost = (avg_cost * shares + excluded.avg_cost * excluded.shares) / (shares + excluded.shares),
+      conviction_score = COALESCE(excluded.conviction_score, conviction_score),
+      conviction_level = COALESCE(excluded.conviction_level, conviction_level),
+      last_analysis_id = COALESCE(excluded.last_analysis_id, last_analysis_id),
+      last_analysis_date = COALESCE(excluded.last_analysis_date, last_analysis_date),
       updated_at = excluded.updated_at
     RETURNING id`,
-    args: [holding.portfolioId, holding.ticker, holding.shares, holding.avgCost, holding.currentPrice, holding.sector, now, now],
+    args: [
+      holding.portfolioId,
+      holding.ticker,
+      holding.shares,
+      holding.avgCost,
+      holding.currentPrice,
+      holding.sector,
+      holding.convictionScore,
+      holding.convictionLevel,
+      holding.lastAnalysisId,
+      holding.lastAnalysisDate,
+      now,
+      now,
+    ],
   });
 
   return {
@@ -177,6 +197,10 @@ export async function getHoldings(portfolioId: string): Promise<Holding[]> {
     avgCost: row.avg_cost as number,
     currentPrice: row.current_price as number | null,
     sector: row.sector as string | null,
+    convictionScore: row.conviction_score as number | null,
+    convictionLevel: row.conviction_level as ConvictionLevel | null,
+    lastAnalysisId: row.last_analysis_id as number | null,
+    lastAnalysisDate: row.last_analysis_date as string | null,
     acquiredAt: row.acquired_at as string,
     updatedAt: row.updated_at as string,
   }));
@@ -202,6 +226,10 @@ export async function getHolding(portfolioId: string, ticker: string): Promise<H
     avgCost: row.avg_cost as number,
     currentPrice: row.current_price as number | null,
     sector: row.sector as string | null,
+    convictionScore: row.conviction_score as number | null,
+    convictionLevel: row.conviction_level as ConvictionLevel | null,
+    lastAnalysisId: row.last_analysis_id as number | null,
+    lastAnalysisDate: row.last_analysis_date as string | null,
     acquiredAt: row.acquired_at as string,
     updatedAt: row.updated_at as string,
   };
@@ -245,6 +273,30 @@ export async function removeHolding(portfolioId: string, ticker: string): Promis
   });
 }
 
+export async function updateHoldingConviction(
+  portfolioId: string,
+  ticker: string,
+  convictionScore: number,
+  convictionLevel: 'HIGH' | 'MEDIUM' | 'LOW',
+  analysisId: number
+): Promise<void> {
+  await initializeDatabase();
+  const client = await getDbClient();
+
+  const now = new Date().toISOString();
+
+  await client.execute({
+    sql: `UPDATE holdings SET
+      conviction_score = ?,
+      conviction_level = ?,
+      last_analysis_id = ?,
+      last_analysis_date = ?,
+      updated_at = datetime('now')
+    WHERE portfolio_id = ? AND ticker = ?`,
+    args: [convictionScore, convictionLevel, analysisId, now, portfolioId, ticker],
+  });
+}
+
 // ============================================================================
 // TRANSACTION OPERATIONS
 // ============================================================================
@@ -257,8 +309,9 @@ export async function recordTransaction(transaction: Omit<Transaction, 'id' | 'e
 
   const result = await client.execute({
     sql: `INSERT INTO transactions (
-      portfolio_id, ticker, action, shares, price, total_value, reason, score_at_trade, executed_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+      portfolio_id, ticker, action, shares, price, total_value, reason, score_at_trade,
+      analysis_id, screening_run_id, executed_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     args: [
       transaction.portfolioId,
       transaction.ticker,
@@ -268,6 +321,8 @@ export async function recordTransaction(transaction: Omit<Transaction, 'id' | 'e
       transaction.totalValue,
       transaction.reason,
       transaction.scoreAtTrade,
+      transaction.analysisId,
+      transaction.screeningRunId,
       now,
     ],
   });
@@ -317,6 +372,8 @@ export async function getTransactions(
     totalValue: row.total_value as number,
     reason: row.reason as string | null,
     scoreAtTrade: row.score_at_trade as number | null,
+    analysisId: row.analysis_id as number | null,
+    screeningRunId: row.screening_run_id as string | null,
     executedAt: row.executed_at as string,
   }));
 }

@@ -94,10 +94,23 @@ function normalizeScore(value: number | null, min: number, max: number, invert: 
 
 /**
  * Calculate value score (lower P/E, P/B = better value)
+ * Note: Companies with losses (NULL or negative P/E) are penalized
+ * as they don't have traditional "value" characteristics.
  */
 function calculateValueScore(peRatio: number | null, pbRatio: number | null, dividendYield: number | null): number {
-  // P/E: 5-50 range, lower is better
-  const peScore = normalizeScore(peRatio, 5, 50, true);
+  // P/E scoring:
+  // - NULL P/E (loss-making company): Score 20 (penalized - no earnings)
+  // - Negative P/E: Score 10 (heavily penalized)
+  // - P/E 5-50 range: normalized, lower is better
+  // - P/E > 50: Score approaches 0 (overvalued)
+  let peScore: number;
+  if (peRatio === null || peRatio === undefined || isNaN(peRatio)) {
+    peScore = 20; // Loss-making companies get low value score
+  } else if (peRatio <= 0) {
+    peScore = 10; // Negative P/E is worse
+  } else {
+    peScore = normalizeScore(peRatio, 5, 50, true);
+  }
 
   // P/B: 0.5-10 range, lower is better
   const pbScore = normalizeScore(pbRatio, 0.5, 10, true);

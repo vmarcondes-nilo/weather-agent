@@ -334,6 +334,10 @@ const createInitialPortfolio = createStep({
           avgCost: price,
           currentPrice: price,
           sector: stock.sector,
+          convictionScore: null,
+          convictionLevel: null,
+          lastAnalysisId: null,
+          lastAnalysisDate: null,
         });
         holdings.push(holding);
 
@@ -347,6 +351,8 @@ const createInitialPortfolio = createStep({
           totalValue,
           reason: `Initial portfolio construction - Score: ${stock.totalScore}`,
           scoreAtTrade: stock.totalScore,
+          analysisId: null,
+          screeningRunId: null,
         });
 
         transactions.push({ ticker: stock.ticker, shares, price, totalValue });
@@ -839,6 +845,8 @@ const executeTrades = createStep({
         totalValue: proceeds,
         reason: sell.reason,
         scoreAtTrade: sell.score,
+        analysisId: null,
+        screeningRunId: null,
       });
 
       await removeHolding(portfolioId, sell.ticker);
@@ -876,6 +884,8 @@ const executeTrades = createStep({
         totalValue: cost,
         reason: buy.reason,
         scoreAtTrade: buy.score,
+        analysisId: null,
+        screeningRunId: null,
       });
 
       await addHolding({
@@ -885,6 +895,10 @@ const executeTrades = createStep({
         avgCost: buy.price,
         currentPrice: buy.price,
         sector: getSectorForTicker(buy.ticker),
+        convictionScore: null,
+        convictionLevel: null,
+        lastAnalysisId: null,
+        lastAnalysisDate: null,
       });
 
       cash -= cost;

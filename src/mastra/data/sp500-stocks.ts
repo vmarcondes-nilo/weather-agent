@@ -8,7 +8,9 @@
 // Note: S&P 500 composition changes quarterly. This list should be
 // periodically updated to reflect additions/removals.
 //
-// Last updated: November 2024
+// Last updated: December 2024
+// Removed defunct/acquired: SIVB, FRC, ATVI, NLSN, DISH (acquired/delisted)
+// Fixed ticker formats: BRK.B -> BRK-B, BF.B -> BF-B (Yahoo Finance format)
 // ============================================================================
 
 export const SP500_STOCKS: Record<string, string[]> = {
@@ -21,7 +23,7 @@ export const SP500_STOCKS: Record<string, string[]> = {
     'IBM', 'INTC', 'INTU', 'TXN', 'QCOM', 'NOW', 'AMAT', 'ADI', 'LRCX', 'MU',
     'KLAC', 'SNPS', 'CDNS', 'PANW', 'MCHP', 'MSI', 'APH', 'ADSK', 'FTNT', 'NXPI',
     'MPWR', 'ON', 'FSLR', 'KEYS', 'CDW', 'TYL', 'ANSS', 'HPQ', 'HPE', 'NTAP',
-    'WDC', 'STX', 'AKAM', 'JNPR', 'SWKS', 'QRVO', 'TER', 'ZBRA', 'PTC', 'EPAM',
+    'WDC', 'STX', 'AKAM', 'SWKS', 'QRVO', 'TER', 'ZBRA', 'PTC', 'EPAM',
     'IT', 'CTSH', 'VRSN', 'FFIV', 'GLW', 'GEN', 'TRMB', 'ENPH', 'SEDG', 'ANET',
     'CRWD', 'DDOG', 'ZS', 'TEAM', 'SNOW', 'PLTR', 'NET', 'MDB', 'OKTA', 'HUBS',
   ],
@@ -37,7 +39,7 @@ export const SP500_STOCKS: Record<string, string[]> = {
     'DXCM', 'MTD', 'IQV', 'EW', 'RMD', 'ZBH', 'GEHC', 'CAH', 'HOLX', 'BAX',
     'COO', 'ALGN', 'TECH', 'WAT', 'STE', 'VTRS', 'CRL', 'RVTY', 'HSIC', 'XRAY',
     'DGX', 'LH', 'TFX', 'PODD', 'INCY', 'MOH', 'HUM', 'CNC', 'UHS', 'DVA',
-    'CTLT', 'OGN', 'SOLV', 'JAZZ', 'BIO',
+    'OGN', 'SOLV', 'JAZZ', 'BIO',
   ],
 
   // ============================================================================
@@ -47,14 +49,14 @@ export const SP500_STOCKS: Record<string, string[]> = {
     // Banks
     'JPM', 'BAC', 'WFC', 'GS', 'MS', 'C', 'USB', 'PNC', 'TFC', 'SCHW',
     'COF', 'BK', 'STT', 'FITB', 'HBAN', 'RF', 'CFG', 'KEY', 'NTRS', 'MTB',
-    'ZION', 'CMA', 'SIVB', 'FRC',
+    'ZION', 'CMA',
     // Insurance
-    'BRK.B', 'V', 'MA', 'AXP', 'SPGI', 'BLK', 'MMC', 'CB', 'AON', 'PGR',
+    'BRK-B', 'V', 'MA', 'AXP', 'SPGI', 'BLK', 'MMC', 'CB', 'AON', 'PGR',
     'CME', 'ICE', 'MCO', 'MET', 'AIG', 'PRU', 'MSCI', 'AFL', 'TRV', 'ALL',
     'AJG', 'NDAQ', 'WTW', 'HIG', 'CINF', 'L', 'EG', 'RJF', 'BRO', 'TROW',
-    'FDS', 'RE', 'GL', 'AIZ', 'LNC', 'IVZ', 'BEN',
+    'FDS', 'GL', 'AIZ', 'LNC', 'IVZ', 'BEN',
     // Financial Services
-    'PYPL', 'FIS', 'FISV', 'AMP', 'DFS', 'SYF', 'CBOE',
+    'PYPL', 'FIS', 'FISV', 'AMP', 'SYF', 'CBOE',
   ],
 
   // ============================================================================
@@ -75,8 +77,8 @@ export const SP500_STOCKS: Record<string, string[]> = {
   // ============================================================================
   'Communication Services': [
     'GOOGL', 'GOOG', 'META', 'NFLX', 'DIS', 'CMCSA', 'VZ', 'T', 'TMUS', 'CHTR',
-    'EA', 'ATVI', 'WBD', 'PARA', 'TTWO', 'OMC', 'IPG', 'MTCH', 'LYV', 'FOXA',
-    'FOX', 'NWS', 'NWSA', 'DISH', 'LUMN',
+    'EA', 'WBD', 'TTWO', 'OMC', 'IPG', 'MTCH', 'LYV', 'FOXA',
+    'FOX', 'NWS', 'NWSA', 'LUMN',
   ],
 
   // ============================================================================
@@ -90,7 +92,7 @@ export const SP500_STOCKS: Record<string, string[]> = {
     'VRSK', 'GWW', 'ROK', 'CPRT', 'IR', 'LHX', 'DOV', 'HWM', 'ODFL', 'PWR',
     'XYL', 'TDG', 'PAYX', 'EFX', 'WAB', 'FTV', 'URI', 'EXPD', 'J', 'SNA',
     'AXON', 'IEX', 'BR', 'TXT', 'LDOS', 'JBHT', 'CHRW', 'DAL', 'UAL', 'LUV',
-    'AAL', 'ALK', 'NLSN', 'ROL', 'NDSN', 'RHI', 'PNR', 'MAS', 'AOS', 'ALLE',
+    'AAL', 'ALK', 'ROL', 'NDSN', 'RHI', 'PNR', 'MAS', 'AOS', 'ALLE',
     'HII', 'GNRC', 'PAYC', 'CSGP',
   ],
 
@@ -101,16 +103,16 @@ export const SP500_STOCKS: Record<string, string[]> = {
     'PG', 'KO', 'PEP', 'COST', 'WMT', 'PM', 'MO', 'MDLZ', 'CL', 'TGT',
     'ADM', 'STZ', 'SYY', 'GIS', 'KMB', 'HSY', 'KHC', 'KDP', 'KR', 'WBA',
     'EL', 'MNST', 'MKC', 'CHD', 'CLX', 'K', 'CAG', 'SJM', 'HRL', 'TSN',
-    'BF.B', 'TAP', 'CPB', 'LW', 'BG', 'COTY',
+    'BF-B', 'TAP', 'CPB', 'LW', 'BG', 'COTY',
   ],
 
   // ============================================================================
   // ENERGY (~25 stocks)
   // ============================================================================
   Energy: [
-    'XOM', 'CVX', 'COP', 'SLB', 'EOG', 'MPC', 'PSX', 'VLO', 'PXD', 'OXY',
-    'WMB', 'HES', 'HAL', 'DVN', 'KMI', 'BKR', 'FANG', 'CTRA', 'OKE', 'TRGP',
-    'MRO', 'APA', 'EQT',
+    'XOM', 'CVX', 'COP', 'SLB', 'EOG', 'MPC', 'PSX', 'VLO', 'OXY',
+    'WMB', 'HAL', 'DVN', 'KMI', 'BKR', 'FANG', 'CTRA', 'OKE', 'TRGP',
+    'APA', 'EQT',
   ],
 
   // ============================================================================
@@ -128,7 +130,7 @@ export const SP500_STOCKS: Record<string, string[]> = {
   'Real Estate': [
     'PLD', 'AMT', 'EQIX', 'CCI', 'PSA', 'O', 'WELL', 'DLR', 'SPG', 'VICI',
     'AVB', 'EQR', 'SBAC', 'WY', 'ARE', 'VTR', 'MAA', 'EXR', 'IRM', 'ESS',
-    'INVH', 'UDR', 'KIM', 'REG', 'CPT', 'HST', 'BXP', 'PEAK', 'FRT', 'AIV',
+    'INVH', 'UDR', 'KIM', 'REG', 'CPT', 'HST', 'BXP', 'DOC', 'FRT', 'AIV',
   ],
 
   // ============================================================================
@@ -137,7 +139,7 @@ export const SP500_STOCKS: Record<string, string[]> = {
   Materials: [
     'LIN', 'APD', 'SHW', 'ECL', 'FCX', 'NEM', 'NUE', 'DOW', 'DD', 'PPG',
     'CTVA', 'VMC', 'MLM', 'ALB', 'IFF', 'CF', 'MOS', 'LYB', 'CE', 'FMC',
-    'PKG', 'IP', 'EMN', 'AVY', 'WRK', 'SEE', 'BALL', 'AMCR',
+    'PKG', 'IP', 'EMN', 'AVY', 'SEE', 'BALL', 'AMCR',
   ],
 };
 
