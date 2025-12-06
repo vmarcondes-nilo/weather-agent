@@ -277,24 +277,37 @@ export async function updateHoldingConviction(
   portfolioId: string,
   ticker: string,
   convictionScore: number,
-  convictionLevel: 'HIGH' | 'MEDIUM' | 'LOW',
-  analysisId: number
+  convictionLevel: ConvictionLevel,
+  analysisId: number | null = null
 ): Promise<void> {
   await initializeDatabase();
   const client = await getDbClient();
 
   const now = new Date().toISOString();
 
-  await client.execute({
-    sql: `UPDATE holdings SET
-      conviction_score = ?,
-      conviction_level = ?,
-      last_analysis_id = ?,
-      last_analysis_date = ?,
-      updated_at = datetime('now')
-    WHERE portfolio_id = ? AND ticker = ?`,
-    args: [convictionScore, convictionLevel, analysisId, now, portfolioId, ticker],
-  });
+  // If analysisId is 0 or null, update without changing last_analysis_id
+  if (!analysisId) {
+    await client.execute({
+      sql: `UPDATE holdings SET
+        conviction_score = ?,
+        conviction_level = ?,
+        last_analysis_date = ?,
+        updated_at = datetime('now')
+      WHERE portfolio_id = ? AND ticker = ?`,
+      args: [convictionScore, convictionLevel, now, portfolioId, ticker],
+    });
+  } else {
+    await client.execute({
+      sql: `UPDATE holdings SET
+        conviction_score = ?,
+        conviction_level = ?,
+        last_analysis_id = ?,
+        last_analysis_date = ?,
+        updated_at = datetime('now')
+      WHERE portfolio_id = ? AND ticker = ?`,
+      args: [convictionScore, convictionLevel, analysisId, now, portfolioId, ticker],
+    });
+  }
 }
 
 // ============================================================================

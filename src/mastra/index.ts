@@ -16,6 +16,7 @@ import { tier1ScreeningWorkflow } from './workflows/tier1-screening-workflow';
 import { tier2TriageWorkflow } from './workflows/tier2-triage-workflow';
 import { tier3ResearchWorkflow } from './workflows/tier3-research-workflow';
 import { intelligentPortfolioWorkflow } from './workflows/intelligent-portfolio-workflow';
+import { intelligentRebalanceWorkflow } from './workflows/intelligent-rebalance-workflow';
 import { analystAgent } from './agents/analyst-agent';
 import { fundamentalAnalyst } from './agents/fundamental-analyst';
 import { sentimentAnalyst } from './agents/sentiment-analyst';
@@ -45,6 +46,7 @@ export const mastra = new Mastra({
     tier2TriageWorkflow,
     tier3ResearchWorkflow,
     intelligentPortfolioWorkflow,
+    intelligentRebalanceWorkflow,
   },
   agents: {
     analystAgent,
