@@ -566,7 +566,7 @@ const analyzeHoldingsStep = createStep({
           ticker,
           convictionResult.convictionScore,
           convictionResult.convictionLevel as ConvictionLevel,
-          0 // Analysis ID - not directly available
+          null // Analysis ID - not directly available from conviction calculation
         );
         console.log(`  Updated holding conviction for ${ticker}: ${convictionResult.convictionScore}`);
       } catch (error) {
